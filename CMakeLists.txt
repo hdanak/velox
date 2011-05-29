@@ -12,6 +12,7 @@ option(ENABLE_WALLPAPER     "Build the wallpaper plugin"    ON)
 option(ENABLE_ALSA          "Build the alsa plugin"         ON)
 option(ENABLE_BAR           "Build the bar plugin"          ON)
 option(ENABLE_PULSEAUDIO    "Build the PulseAudio plugin"   ON)
+option(ENABLE_RANDR         "Build the RandR module"        ON)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DVELOX_DEBUG")
@@ -37,6 +38,10 @@ endif(ENABLE_ALSA)
 if(ENABLE_PULSEAUDIO)
     find_package(LibPulse REQUIRED)
 endif(ENABLE_PULSEAUDIO)
+
+if(ENABLE_RANDR)
+    find_package(XCB-RandR REQUIRED)
+endif(ENABLE_RANDR)
 
 add_subdirectory(velox)
 add_subdirectory(modules)
