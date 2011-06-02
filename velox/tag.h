@@ -60,8 +60,6 @@ DEFINE_VECTOR(velox_tag_vector, struct velox_tag);
 
 extern struct velox_tag_vector tags;
 
-void setup_tags();
-void cleanup_tags();
 
 #endif
 

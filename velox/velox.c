@@ -53,6 +53,7 @@
 #include "event_handler-private.h"
 #include "work_area-private.h"
 #include "binding-private.h"
+#include "tag-private.h"
 
 /* X variables */
 xcb_connection_t * c;
