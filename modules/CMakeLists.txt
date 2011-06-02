@@ -9,6 +9,7 @@ set(VELOX_MODULES
     alsa
     bar
     pulseaudio
+    randr
 )
 
 include_directories(${velox_SOURCE_DIR})
@@ -35,4 +36,9 @@ if(ENABLE_PULSEAUDIO)
     target_link_libraries(velox_pulseaudio ${LibPulse_LIBRARIES})
     include_directories(${LibPulse_INCLUDE_DIR})
 endif(ENABLE_PULSEAUDIO)
+
+if(ENABLE_RANDR)
+    target_link_libraries(velox_randr ${XCB-RandR_LIBRARIES})
+    include_directories(${XCB-RandR_INCLUDE_DIR})
+endif(ENABLE_RANDR)
 
