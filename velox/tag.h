@@ -61,6 +61,15 @@ DEFINE_VECTOR(velox_tag_vector, struct velox_tag);
 extern struct velox_tag_vector tags;
 
 
+static inline struct list_head * tag_focused_windows(struct velox_tag * tag)
+{
+    switch (tag->focus_type)
+    {
+        case TILE:  return &tag->tiled.windows;
+        case FLOAT: return &tag->floated.windows;
+    }
+}
+
 #endif
 
 // vim: fdm=syntax fo=croql et sw=4 sts=4 ts=8

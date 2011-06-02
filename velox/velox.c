@@ -82,8 +82,7 @@ xcb_cursor_t cursors[3];
 /* VELOX variables */
 volatile sig_atomic_t running = true;
 volatile sig_atomic_t clock_tick_update = true;
-uint64_t tag_mask = 0;
-struct velox_tag * tag = NULL;
+struct velox_monitor * monitor = NULL;
 struct velox_area screen_area;
 struct velox_area work_area;
 uint8_t clear_event_type = 0;
@@ -354,12 +353,10 @@ void setup()
     setup_modules();
 
     setup_tags();
+    setup_monitors();
 
     grab_keys(setup->min_keycode, setup->max_keycode);
     grab_buttons();
-
-    assert(tags.size > 0);
-    tag = &tags.data[0];
 }
 
 void show_window(xcb_window_t window_id)
@@ -506,45 +503,61 @@ void set_tag(union velox_argument argument)
 
     assert(index < tags.size);
 
-    if (tag == &tags.data[index]) return; // Nothing to do...
+    if (monitor->tag == &tags.data[index]) return; // Nothing to do...
     else
     {
-        struct velox_window_entry * window_entry;
-        struct velox_loop * iterator;
-        struct velox_window * window;
+        bool swapping_tags = false;
+        struct velox_monitor * m;
 
-        /* Show the windows now visible */
-        list_for_each_entry(window_entry, &tags.data[index].tiled.windows, head)
+        vector_for_each(&monitors, m)
         {
-            show_window(window_entry->window->window_id);
+            if (m->tag == &tags.data[index])
+            {
+                m->tag = monitor->tag;
+                swapping_tags = true;
+                break;
+            }
         }
 
-        list_for_each_entry(window_entry, &tags.data[index].floated.windows, head)
+        if (!swapping_tags)
         {
-            show_window(window_entry->window->window_id);
+            struct velox_window_entry * window_entry;
+            struct velox_loop * iterator;
+            struct velox_window * window;
+
+            /* Show the windows now visible */
+            list_for_each_entry(window_entry, &tags.data[index].tiled.windows, head)
+            {
+                show_window(window_entry->window->window_id);
+            }
+
+            list_for_each_entry(window_entry, &tags.data[index].floated.windows, head)
+            {
+                show_window(window_entry->window->window_id);
+            }
+
+            update_focus(&tags.data[index]);
+
+            /* Hide windows no longer visible */
+            list_for_each_entry(window_entry, &monitor->tag->tiled.windows, head)
+            {
+                hide_window(window_entry->window->window_id);
+            }
+
+            list_for_each_entry(window_entry, &monitor->tag->floated.windows, head)
+            {
+                hide_window(window_entry->window->window_id);
+            }
         }
 
-        update_focus(&tags.data[index]);
+        monitor->tag = &tags.data[index];
 
-        /* Hide windows no longer visible */
-        list_for_each_entry(window_entry, &tag->tiled.windows, head)
-        {
-            hide_window(window_entry->window->window_id);
-        }
+        if (swapping_tags)
+            arrange_all();
+        else
+            arrange(monitor);
 
-        list_for_each_entry(window_entry, &tag->floated.windows, head)
-        {
-            hide_window(window_entry->window->window_id);
-        }
-
-        tag = &tags.data[index];
-
-        if (tag->focus_type == TILE)
-        {
-            arrange();
-        }
-
-        run_hooks(tag, VELOX_HOOK_TAG_CHANGED);
+        run_hooks(monitor->tag, VELOX_HOOK_TAG_CHANGED);
 
         xcb_flush(c);
     }
@@ -556,32 +569,32 @@ void move_focus_to_tag(union velox_argument argument)
 
     DEBUG_ENTER
 
-    if (tag->focus_type == TILE)
+    if (monitor->tag->focus_type == TILE)
     {
-        if (list_empty(&tag->tiled.windows)) return;
+        if (list_empty(&monitor->tag->tiled.windows)) return;
         else
         {
             struct list_head * next_focus;
             struct velox_window * window;
 
-            window = list_entry(tag->tiled.focus, struct velox_window_entry, head)->window;
+            window = list_entry(monitor->tag->tiled.focus, struct velox_window_entry, head)->window;
 
             /* Deal with special cases */
-            if (list_is_singular(&tag->tiled.windows))
+            if (list_is_singular(&monitor->tag->tiled.windows))
             {
                 /* Set focus to the list head (no focus) */
-                next_focus = &tag->tiled.windows;
+                next_focus = &monitor->tag->tiled.windows;
             }
             else
             {
-                next_focus = list_actual_next(tag->tiled.focus, &tag->tiled.windows);
+                next_focus = list_actual_next(monitor->tag->tiled.focus, &monitor->tag->tiled.windows);
             }
 
             /* Remove the focus from the old list, and add it to the new list */
-            list_del(tag->tiled.focus);
-            list_add(tag->tiled.focus, &tags.data[index].tiled.windows);
+            list_del(monitor->tag->tiled.focus);
+            list_add(monitor->tag->tiled.focus, &tags.data[index].tiled.windows);
 
-            tag->tiled.focus = next_focus;
+            monitor->tag->tiled.focus = next_focus;
 
             if (list_is_singular(&tags.data[index].tiled.windows))
             {
@@ -591,14 +604,15 @@ void move_focus_to_tag(union velox_argument argument)
 
             /* Switch focus type to float if those are the only windows on this
              * tag */
-            if (list_empty(&tag->tiled.windows) && !list_empty(&tag->floated.windows))
+            if (list_empty(&monitor->tag->tiled.windows)
+                && !list_empty(&monitor->tag->floated.windows))
             {
-                tag->focus_type = FLOAT;
+                monitor->tag->focus_type = FLOAT;
             }
 
-            update_focus(tag);
+            update_focus(monitor->tag);
             hide_window(window->window_id);
-            arrange();
+            arrange_all();
 
             /* If the new tag only has tiling windows, set its focus type to
              * tile */
@@ -608,12 +622,12 @@ void move_focus_to_tag(union velox_argument argument)
             }
         }
     }
-    else if (tag->focus_type == FLOAT)
+    else if (monitor->tag->focus_type == FLOAT)
     {
-        if (list_empty(&tag->floated.windows)) return;
+        if (list_empty(&monitor->tag->floated.windows)) return;
         else
         {
-            struct list_head * head = tag->floated.windows.next;
+            struct list_head * head = monitor->tag->floated.windows.next;
             struct velox_window * window;
 
             window = list_entry(head, struct velox_window_entry, head)->window;
@@ -623,14 +637,14 @@ void move_focus_to_tag(union velox_argument argument)
 
             /* Switch focus type to tile if those are the only windows on this
              * tag */
-            if (list_empty(&tag->floated.windows))
+            if (list_empty(&monitor->tag->floated.windows))
             {
-                tag->focus_type = TILE;
+                monitor->tag->focus_type = TILE;
             }
 
-            update_focus(tag);
+            update_focus(monitor->tag);
             hide_window(window->window_id);
-            arrange();
+            arrange_all();
 
             if (list_empty(&tags.data[index].tiled.windows))
             {
@@ -644,34 +658,34 @@ void move_focus_to_tag(union velox_argument argument)
 
 void set_focus_type(enum velox_tag_focus_type focus_type)
 {
-    if (tag->focus_type == focus_type) return;
+    if (monitor->tag->focus_type == focus_type) return;
 
-    if (focus_type == TILE && !list_empty(&tag->tiled.windows))
+    if (focus_type == TILE && !list_empty(&monitor->tag->tiled.windows))
     {
-        tag->focus_type = focus_type;
+        monitor->tag->focus_type = focus_type;
 
-        focus(list_entry(tag->tiled.focus, struct velox_window_entry,
+        focus(list_entry(monitor->tag->tiled.focus, struct velox_window_entry,
             head)->window->window_id);
     }
-    else if (focus_type == FLOAT && !list_empty(&tag->floated.windows))
+    else if (focus_type == FLOAT && !list_empty(&monitor->tag->floated.windows))
     {
-        tag->focus_type = focus_type;
+        monitor->tag->focus_type = focus_type;
 
-        focus(list_first_entry(&tag->floated.windows, struct velox_window_entry,
+        focus(list_first_entry(&monitor->tag->floated.windows, struct velox_window_entry,
             head)->window->window_id);
     }
 }
 
 void next_tag()
 {
-    struct velox_tag * tag_iterator;
+    struct velox_tag * tag;
     uint8_t index;
 
     DEBUG_ENTER
 
-    vector_for_each_with_index(&tags, tag_iterator, index)
+    vector_for_each_with_index(&tags, tag, index)
     {
-        if (tag_iterator == tag) break;
+        if (tag == monitor->tag) break;
     }
 
     if (++index == tags.size)
@@ -684,14 +698,14 @@ void next_tag()
 
 void previous_tag()
 {
-    struct velox_tag * tag_iterator;
+    struct velox_tag * tag;
     uint8_t index;
 
     DEBUG_ENTER
 
-    vector_for_each_with_index(&tags, tag_iterator, index)
+    vector_for_each_with_index(&tags, tag, index)
     {
-        if (tag_iterator == tag) break;
+        if (tag == monitor->tag) break;
     }
 
     if (index-- == 0)
@@ -704,126 +718,123 @@ void previous_tag()
 
 void toggle_focus_type()
 {
-    if (tag->focus_type == TILE)    set_focus_type(FLOAT);
-    else                            set_focus_type(TILE);
+    if (monitor->tag->focus_type == TILE)
+        set_focus_type(FLOAT);
+    else
+        set_focus_type(TILE);
 }
 
 void next_layout()
 {
     DEBUG_ENTER
 
-    tag->layout = list_actual_next(tag->layout, &tag->layouts);
-    tag->state = list_entry(tag->layout, struct velox_layout_entry, head)->layout->default_state;
+    monitor->tag->layout = list_actual_next(monitor->tag->layout,
+        &monitor->tag->layouts);
+    monitor->tag->state = list_entry(monitor->tag->layout,
+        struct velox_layout_entry, head)->layout->default_state;
 
-    arrange();
+    arrange(monitor);
 }
 
 void previous_layout()
 {
     DEBUG_ENTER
 
-    tag->layout = list_actual_prev(tag->layout, &tag->layouts);
-    tag->state = list_entry(tag->layout, struct velox_layout_entry, head)->layout->default_state;
+    monitor->tag->layout = list_actual_prev(monitor->tag->layout,
+        &monitor->tag->layouts);
+    monitor->tag->state = list_entry(monitor->tag->layout,
+        struct velox_layout_entry, head)->layout->default_state;
 
-    arrange();
+    arrange(monitor);
+}
+
+void cycle_focus(enum direction direction)
+{
+    DEBUG_ENTER
+
+    struct list_head * windows = tag_focused_windows(monitor->tag), * head;
+
+    if (list_empty(windows) || list_is_singular(windows))
+        return;
+
+    switch (monitor->tag->focus_type)
+    {
+        case TILE:
+            switch (direction)
+            {
+                case FORWARD:
+                    monitor->tag->tiled.focus = list_actual_next(
+                        monitor->tag->tiled.focus, windows);
+                    break;
+                case BACKWARD:
+                    monitor->tag->tiled.focus = list_actual_prev(
+                        monitor->tag->tiled.focus, windows);
+                    break;
+            }
+
+            focus(list_entry(monitor->tag->tiled.focus,
+                struct velox_window_entry, head)->window->window_id);
+
+            break;
+
+        case FLOAT:
+            switch (direction)
+            {
+                case FORWARD:
+                    head = monitor->tag->floated.windows.prev;
+                    list_del(head);
+                    list_add(head, &monitor->tag->floated.windows);
+                    break;
+                case BACKWARD:
+                    head = monitor->tag->floated.windows.next;
+                    list_del(head);
+                    list_add_tail(head, &monitor->tag->floated.windows);
+                    break;
+            }
+
+            focus(list_first_entry(&monitor->tag->floated.windows,
+                struct velox_window_entry, head)->window->window_id);
+
+            restack();
+            break;
+    }
 }
 
 void focus_next()
 {
-    DEBUG_ENTER
-
-    if (tag->focus_type == TILE)
-    {
-        if (list_empty(&tag->tiled.windows) || list_is_singular(&tag->tiled.windows))
-        {
-            return;
-        }
-
-        tag->tiled.focus = list_actual_next(tag->tiled.focus, &tag->tiled.windows);
-
-        focus(list_entry(tag->tiled.focus, struct velox_window_entry,
-            head)->window->window_id);
-    }
-    else if (tag->focus_type == FLOAT)
-    {
-        struct list_head * head;
-
-        if (list_empty(&tag->floated.windows) || list_is_singular(&tag->floated.windows))
-        {
-            return;
-        }
-
-        head = tag->floated.windows.prev;
-
-        list_del(head);
-        list_add(head, &tag->floated.windows);
-
-        focus(list_entry(head, struct velox_window_entry, head)->window->window_id);
-
-        restack();
-    }
+    cycle_focus(FORWARD);
 }
 
 void focus_previous()
 {
-    DEBUG_ENTER
-
-    if (tag->focus_type == TILE)
-    {
-        if (list_empty(&tag->tiled.windows) || list_is_singular(&tag->tiled.windows))
-        {
-            return;
-        }
-
-        tag->tiled.focus = list_actual_prev(tag->tiled.focus, &tag->tiled.windows);
-
-        focus(list_entry(tag->tiled.focus, struct velox_window_entry,
-            head)->window->window_id);
-    }
-    else if (tag->focus_type == FLOAT)
-    {
-        struct list_head * head;
-
-        if (list_empty(&tag->floated.windows) || list_is_singular(&tag->floated.windows))
-        {
-            return;
-        }
-
-        head = tag->floated.windows.next;
-
-        list_del(head);
-        list_add_tail(head, &tag->floated.windows);
-
-        focus(list_first_entry(&tag->floated.windows, struct velox_window_entry,
-            head)->window->window_id);
-
-        restack();
-    }
+    cycle_focus(BACKWARD);
 }
 
 void move_next()
 {
     DEBUG_ENTER
 
-    if (tag->focus_type == TILE)
+    if (monitor->tag->focus_type == TILE)
     {
         struct velox_window_entry * first, * second;
         struct velox_window * first_window;
 
-        if (list_empty(&tag->tiled.windows)) return;
+        if (list_empty(&monitor->tag->tiled.windows)) return;
 
-        first = list_entry(tag->tiled.focus, struct velox_window_entry, head);
-        second = list_entry(list_actual_next(tag->tiled.focus, &tag->tiled.windows),
+        first = list_entry(monitor->tag->tiled.focus,
             struct velox_window_entry, head);
+        second = list_entry(list_actual_next(monitor->tag->tiled.focus,
+            &monitor->tag->tiled.windows), struct velox_window_entry, head);
 
         /* Swap the two windows */
         first_window = first->window;
         first->window = second->window;
         second->window = first_window;
 
-        tag->tiled.focus = list_actual_next(tag->tiled.focus, &tag->tiled.windows);
+        monitor->tag->tiled.focus = list_actual_next(monitor->tag->tiled.focus,
+            &monitor->tag->tiled.windows);
 
-        arrange();
+        arrange(monitor);
     }
 }
 
@@ -831,25 +842,27 @@ void move_previous()
 {
     DEBUG_ENTER
 
-    if (tag->focus_type == TILE)
+    if (monitor->tag->focus_type == TILE)
     {
         struct velox_window_entry * first, * second;
         struct velox_window * first_window;
 
-        if (list_empty(&tag->tiled.windows)) return;
+        if (list_empty(&monitor->tag->tiled.windows)) return;
 
-        first = list_entry(tag->tiled.focus, struct velox_window_entry, head);
-        second = list_entry(list_actual_prev(tag->tiled.focus, &tag->tiled.windows),
+        first = list_entry(monitor->tag->tiled.focus,
             struct velox_window_entry, head);
+        second = list_entry(list_actual_prev(monitor->tag->tiled.focus,
+            &monitor->tag->tiled.windows), struct velox_window_entry, head);
 
         /* Swap the two windows */
         first_window = first->window;
         first->window = second->window;
         second->window = first_window;
 
-        tag->tiled.focus = list_actual_prev(tag->tiled.focus, &tag->tiled.windows);
+        monitor->tag->tiled.focus = list_actual_prev(monitor->tag->tiled.focus,
+            &monitor->tag->tiled.windows);
 
-        arrange();
+        arrange(monitor);
     }
 }
 
@@ -890,41 +903,41 @@ void toggle_floating()
 {
     struct velox_window_entry * entry;
 
-    if (tag->focus_type == TILE)
+    if (monitor->tag->focus_type == TILE)
     {
-        if (!list_empty(&tag->tiled.windows))
+        if (!list_empty(&monitor->tag->tiled.windows))
         {
-            entry = list_entry(tag->tiled.focus, struct velox_window_entry, head);
-            tag->tiled.focus = list_actual_next(tag->tiled.focus, &tag->tiled.windows);
+            entry = list_entry(monitor->tag->tiled.focus, struct velox_window_entry, head);
+            monitor->tag->tiled.focus = list_actual_next(monitor->tag->tiled.focus, &monitor->tag->tiled.windows);
 
             list_del(&entry->head);
-            list_add(&entry->head, &tag->floated.windows);
+            list_add(&entry->head, &monitor->tag->floated.windows);
 
             entry->window->floating = true;
-            tag->focus_type = FLOAT;
+            monitor->tag->focus_type = FLOAT;
 
-            update_focus(tag);
+            update_focus(monitor->tag);
             restack();
-            arrange();
+            arrange(monitor);
         }
     }
     else
     {
-        if (!list_empty(&tag->floated.windows))
+        if (!list_empty(&monitor->tag->floated.windows))
         {
-            entry = list_first_entry(&tag->floated.windows, struct velox_window_entry, head);
+            entry = list_first_entry(&monitor->tag->floated.windows, struct velox_window_entry, head);
 
             list_del(&entry->head);
-            list_add(&entry->head, &tag->tiled.windows);
+            list_add(&entry->head, &monitor->tag->tiled.windows);
 
-            tag->tiled.focus = &entry->head;
+            monitor->tag->tiled.focus = &entry->head;
 
             entry->window->floating = false;
-            tag->focus_type = TILE;
+            monitor->tag->focus_type = TILE;
 
-            update_focus(tag);
+            update_focus(monitor->tag);
             restack();
-            arrange();
+            arrange(monitor);
         }
     }
 }
@@ -1065,20 +1078,27 @@ void resize_float(union velox_argument argument)
     free(grab_reply);
 }
 
-void arrange()
+void arrange(struct velox_monitor * m)
 {
     DEBUG_ENTER
 
-    if (list_empty(&tag->tiled.windows)) return;
+    if (list_empty(&m->tag->tiled.windows)) return;
 
-    assert(!list_empty(&tag->layouts));
+    assert(!list_empty(&m->tag->layouts));
 
-    calculate_work_area(&screen_area, &work_area);
-    list_entry(
-        tag->layout, struct velox_layout_entry, head
-    )->layout->arrange(&work_area, &tag->tiled.windows, &tag->state);
+    calculate_work_area(&m->area, &work_area);
+    list_entry(m->tag->layout, struct velox_layout_entry, head)->layout
+        ->arrange(&work_area, &m->tag->tiled.windows, &m->tag->state);
 
     clear_event_type = XCB_ENTER_NOTIFY;
+}
+
+void arrange_all()
+{
+    struct velox_monitor * m;
+
+    vector_for_each(&monitors, m)
+        arrange(m);
 }
 
 void restack()
@@ -1088,7 +1108,7 @@ void restack()
     struct velox_window_entry * entry;
 
     /* Stack the floating windows */
-    list_for_each_entry_reverse(entry, &tag->floated.windows, head)
+    list_for_each_entry_reverse(entry, &monitor->tag->floated.windows, head)
     {
         xcb_configure_window(c, entry->window->window_id, mask, values);
     }
@@ -1142,7 +1162,7 @@ void manage(xcb_window_t window_id)
     }
     else
     {
-        window->tag = tag;
+        window->tag = monitor->tag;
     }
 
     free(transient_for_reply);
@@ -1200,12 +1220,12 @@ void manage(xcb_window_t window_id)
         window->tag->focus_type = TILE;
     }
 
-    if (tag == window->tag)
+    if (monitor->tag == window->tag)
     {
         if (window->floating) restack();
         else
         {
-            arrange();
+            arrange(monitor);
             restack();
         }
 
@@ -1258,7 +1278,7 @@ void unmanage(xcb_window_t window_id)
                     tag_pos->focus_type = FLOAT;
                 }
 
-                arrange();
+                arrange(monitor);
 
                 goto found;
             }
@@ -1280,7 +1300,7 @@ void unmanage(xcb_window_t window_id)
                     tag_pos->focus_type = TILE;
                 }
 
-                arrange();
+                arrange(monitor);
 
                 goto found;
             }
@@ -1292,9 +1312,9 @@ void unmanage(xcb_window_t window_id)
     found:
         DEBUG_PRINT("found\n")
 
-        if (tag == tag_pos)
+        if (monitor->tag == tag_pos)
         {
-            update_focus(tag);
+            update_focus(monitor->tag);
         }
 
         run_hooks(window, VELOX_HOOK_UNMANAGE);

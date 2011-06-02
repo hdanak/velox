@@ -12,6 +12,7 @@ add_executable(velox
     module.c
     ewmh.c
     work_area.c
+    monitor.c
 
     hashtable.c
 )

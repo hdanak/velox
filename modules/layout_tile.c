@@ -225,13 +225,13 @@ static void increase_master_factor()
     DEBUG_ENTER
 
     if (strcmp(list_entry(
-            tag->layout, struct velox_layout_entry, head
+            monitor->tag->layout, struct velox_layout_entry, head
         )->layout->identifier, "tile") == 0)
     {
-        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&tag->state);
+        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&monitor->tag->state);
         state->master_factor = MIN(state->master_factor + 0.025, 1.0);
 
-        arrange();
+        arrange(monitor);
     }
 }
 
@@ -240,13 +240,13 @@ static void decrease_master_factor()
     DEBUG_ENTER
 
     if (strcmp(list_entry(
-            tag->layout, struct velox_layout_entry, head
+            monitor->tag->layout, struct velox_layout_entry, head
         )->layout->identifier, "tile") == 0)
     {
-        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&tag->state);
+        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&monitor->tag->state);
         state->master_factor = MAX(state->master_factor - 0.025, 0.0);
 
-        arrange();
+        arrange(monitor);
     }
 }
 
@@ -255,13 +255,13 @@ static void increase_master_count()
     DEBUG_ENTER
 
     if (strcmp(list_entry(
-            tag->layout, struct velox_layout_entry, head
+            monitor->tag->layout, struct velox_layout_entry, head
         )->layout->identifier, "tile") == 0)
     {
-        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&tag->state);
+        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&monitor->tag->state);
         state->master_count++;
 
-        arrange();
+        arrange(monitor);
     }
 }
 
@@ -270,13 +270,13 @@ static void decrease_master_count()
     DEBUG_ENTER
 
     if (strcmp(list_entry(
-            tag->layout, struct velox_layout_entry, head
+            monitor->tag->layout, struct velox_layout_entry, head
         )->layout->identifier, "tile") == 0)
     {
-        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&tag->state);
+        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&monitor->tag->state);
         state->master_count = MAX(state->master_count - 1, 0);
 
-        arrange();
+        arrange(monitor);
     }
 }
 
@@ -285,13 +285,13 @@ static void increase_column_count()
     DEBUG_ENTER
 
     if (strcmp(list_entry(
-            tag->layout, struct velox_layout_entry, head
+            monitor->tag->layout, struct velox_layout_entry, head
         )->layout->identifier, "tile") == 0)
     {
-        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&tag->state);
+        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&monitor->tag->state);
         state->column_count++;
 
-        arrange();
+        arrange(monitor);
     }
 }
 
@@ -300,13 +300,13 @@ static void decrease_column_count()
     DEBUG_ENTER
 
     if (strcmp(list_entry(
-            tag->layout, struct velox_layout_entry, head
+            monitor->tag->layout, struct velox_layout_entry, head
         )->layout->identifier, "tile") == 0)
     {
-        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&tag->state);
+        struct velox_tile_layout_state * state = (struct velox_tile_layout_state *) (&monitor->tag->state);
         state->column_count = MAX(state->column_count - 1, 1);
 
-        arrange();
+        arrange(monitor);
     }
 }
 

@@ -151,13 +151,13 @@ static void window_title_item(struct pixmap * pixmap)
 {
     struct velox_window_entry * entry = NULL;
 
-    if (tag->focus_type == TILE && !list_empty(&tag->tiled.windows))
+    if (monitor->tag->focus_type == TILE && !list_empty(&monitor->tag->tiled.windows))
     {
-        entry = list_entry(tag->tiled.focus, struct velox_window_entry, head);
+        entry = list_entry(monitor->tag->tiled.focus, struct velox_window_entry, head);
     }
-    else if (!list_empty(&tag->floated.windows))
+    else if (!list_empty(&monitor->tag->floated.windows))
     {
-        entry = list_first_entry(&tag->floated.windows, struct velox_window_entry, head);
+        entry = list_first_entry(&monitor->tag->floated.windows, struct velox_window_entry, head);
     }
 
     if (entry)
@@ -168,7 +168,7 @@ static void window_title_item(struct pixmap * pixmap)
 
 static void tag_list_item(struct pixmap * pixmap)
 {
-    struct velox_tag * tag_iterator;
+    struct velox_tag * tag;
     uint32_t index;
     uint32_t length;
     uint32_t x = 0;
@@ -180,14 +180,12 @@ static void tag_list_item(struct pixmap * pixmap)
     pixmap->pixmap = xcb_generate_id(c);
     pixmap->width = 0;
 
-    vector_for_each(&tags, tag_iterator)
+    vector_for_each(&tags, tag)
     {
-        for (index = 0, length = strlen(tag_iterator->name); index < length; ++index)
-        {
-            text2b[index] = (xcb_char2b_t) { 0, tag_iterator->name[index] };
-        }
+        for (index = 0, length = strlen(tag->name); index < length; ++index)
+            text2b[index] = (xcb_char2b_t) { 0, tag->name[index] };
 
-        text_extents_cookies[vector_position(&tags, tag_iterator)] =
+        text_extents_cookies[vector_position(&tags, tag)] =
             xcb_query_text_extents(c, font, length, text2b);
     }
 
@@ -205,18 +203,18 @@ static void tag_list_item(struct pixmap * pixmap)
     xcb_poly_fill_rectangle(c, pixmap->pixmap, default_background_gc, 1, (xcb_rectangle_t[])
         { 0, 0, pixmap->width, bar_height });
 
-    vector_for_each_with_index(&tags, tag_iterator, index)
+    vector_for_each_with_index(&tags, tag, index)
     {
-        if (tag_iterator == tag)
+        if (tag == monitor->tag)
         {
             xcb_poly_fill_rectangle(c, pixmap->pixmap, selected_background_gc, 1,
                 (xcb_rectangle_t[]) { x, 0, widths[index], bar_height });
         }
 
-        xcb_image_text_8(c, strlen(tag_iterator->name), pixmap->pixmap,
-            tag_iterator == tag ? selected_foreground_gc : default_foreground_gc,
+        xcb_image_text_8(c, strlen(tag->name), pixmap->pixmap,
+            tag == monitor->tag ? selected_foreground_gc : default_foreground_gc,
             x + spacing / 2, (bar_height + text_extents_replies[index]->font_ascent -
-            text_extents_replies[index]->font_descent) / 2, tag_iterator->name);
+            text_extents_replies[index]->font_descent) / 2, tag->name);
 
         x += widths[index];
     }

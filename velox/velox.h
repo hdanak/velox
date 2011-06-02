@@ -24,8 +24,15 @@
 #include <sys/param.h>
 
 #include <velox/window.h>
+#include <velox/monitor.h>
 #include <velox/tag.h>
 #include <velox/binding.h>
+
+enum direction
+{
+    FORWARD,
+    BACKWARD
+};
 
 extern xcb_connection_t * c;
 extern xcb_screen_t * screen;
@@ -39,11 +46,12 @@ extern const char wm_name[];
 
 extern xcb_atom_t WM_PROTOCOLS, WM_DELETE_WINDOW, WM_STATE;
 
-extern struct velox_tag * tag;
+extern struct velox_monitor * monitor;
 
 void synthetic_configure(struct velox_window * window);
 
-void arrange();
+void arrange(struct velox_monitor * monitor);
+void arrange_all();
 void restack();
 
 void spawn(char * const cmd[]);

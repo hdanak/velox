@@ -234,22 +234,22 @@ static void handle_client_message(xcb_client_message_event_t * event)
 
         DEBUG_PRINT("window: 0x%x\n", event->data.data32[0])
 
-        old_focus = tag->tiled.focus;
+        old_focus = monitor->tag->tiled.focus;
 
         /* Assume the client message is valid */
-        for (tag->tiled.focus = list_actual_next(tag->tiled.focus, &tag->tiled.windows);
-            tag->tiled.focus != old_focus;
-            tag->tiled.focus = list_actual_next(tag->tiled.focus, &tag->tiled.windows))
+        for (monitor->tag->tiled.focus = list_actual_next(monitor->tag->tiled.focus, &monitor->tag->tiled.windows);
+            monitor->tag->tiled.focus != old_focus;
+            monitor->tag->tiled.focus = list_actual_next(monitor->tag->tiled.focus, &monitor->tag->tiled.windows))
         {
             if (list_entry(
-                    tag->tiled.focus, struct velox_window_entry, head
+                    monitor->tag->tiled.focus, struct velox_window_entry, head
                 )->window->window_id == event->window)
             {
                 break;
             }
         }
 
-        focus(list_entry(tag->tiled.focus, struct velox_window_entry, head)->window->window_id);
+        focus(list_entry(monitor->tag->tiled.focus, struct velox_window_entry, head)->window->window_id);
     }
 }
 

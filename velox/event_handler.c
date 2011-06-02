@@ -137,13 +137,9 @@ static void button_press(xcb_button_press_event_t * event)
         focus(event->event);
 
         if (window && window->floating)
-        {
-            tag->focus_type = FLOAT;
-        }
+            monitor->tag->focus_type = FLOAT;
         else
-        {
-            tag->focus_type = TILE;
-        }
+            monitor->tag->focus_type = TILE;
     }
 }
 
@@ -152,7 +148,7 @@ static void enter_notify(xcb_enter_notify_event_t * event)
     DEBUG_ENTER
     DEBUG_PRINT("window_id: 0x%x\n", event->event)
 
-    if (tag->focus_type == FLOAT) return;
+    if (monitor->tag->focus_type == FLOAT) return;
 
     if (event->event == screen->root) focus(screen->root);
     else
@@ -163,7 +159,7 @@ static void enter_notify(xcb_enter_notify_event_t * event)
         window = NULL;
 
         /* Look through tiled windows */
-        list_for_each_entry(entry, &tag->tiled.windows, head)
+        list_for_each_entry(entry, &monitor->tag->tiled.windows, head)
         {
             if (entry->window->window_id == event->event)
             {
@@ -268,7 +264,7 @@ static void configure_notify(xcb_configure_notify_event_t * event)
         screen_area.width = event->width;
         screen_area.height = event->height;
 
-        arrange();
+        arrange_all();
 
         run_hooks(NULL, VELOX_HOOK_ROOT_RESIZED);
     }
