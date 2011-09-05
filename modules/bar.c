@@ -414,7 +414,7 @@ bool setup()
     add_hook(&redraw_hook, VELOX_HOOK_FOCUS_CHANGED);
     add_hook(&redraw_hook, VELOX_HOOK_WINDOW_NAME_CHANGED);
     add_hook(&resize_hook, VELOX_HOOK_ROOT_RESIZED);
-    add_expose_event_handler(&expose);
+    add_event_handler(XCB_EXPOSE, &expose);
 
     /* Add bar items */
     vector_append(&items[ALIGN_LEFT], tag_list_item);

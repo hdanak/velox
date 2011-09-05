@@ -316,7 +316,7 @@ void setup_ewmh()
     xcb_ewmh_set_desktop_geometry(ewmh, 0, screen_area.width, screen_area.height);
     xcb_ewmh_set_desktop_viewport(ewmh, 0, 0, 0);
 
-    add_client_message_event_handler(&handle_client_message);
+    add_event_handler(XCB_CLIENT_MESSAGE, &handle_client_message);
     add_work_area_modifier(avoid_struts);
 
     /* Client list updates */

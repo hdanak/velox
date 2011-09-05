@@ -17,12 +17,9 @@
  * with velox.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define DO(type, name) \
-    typedef void (* name ## _event_handler_t)                               \
-        (xcb_ ## name ## _event_t * event);                                 \
-    void add_ ## name ## _event_handler(name ## _event_handler_t handler);
-#include "event_types.h"
-#undef DO
+typedef void (* velox_event_handler_t)(xcb_generic_event_t * event);
+
+void add_event_handler(uint8_t type, velox_event_handler_t handler);
 
 // vim: fdm=syntax fo=croql et sw=4 sts=4 ts=8
 

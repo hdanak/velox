@@ -34,43 +34,54 @@
 #include "ewmh-private.h"
 #include "binding-private.h"
 
-#define DO(type, name)                                                      \
-LIST_HEAD(name ## _event_handlers);                                         \
-                                                                            \
-struct name ## _event_handler_entry                                         \
-{                                                                           \
-    name ## _event_handler_t handler;                                       \
-    struct list_head head;                                                  \
-};                                                                          \
-                                                                            \
-void add_ ## name ## _event_handler(name ## _event_handler_t handler)       \
-{                                                                           \
-    struct name ## _event_handler_entry * entry =                           \
-        malloc(sizeof(struct name ## _event_handler_entry));                \
-    entry->handler = handler;                                               \
-    list_add_tail(&entry->head, &name ## _event_handlers);                  \
+static struct list_head event_handlers[UINT8_MAX];
+static uint32_t event_handlers_size =
+    sizeof(event_handlers) / sizeof(struct list_head);
+
+static void __attribute__((constructor)) initialize_event_handlers()
+{
+    uint8_t index;
+
+    for (index = 0; index < event_handlers_size; ++index)
+    {
+        INIT_LIST_HEAD(&event_handlers[index]);
+    }
 }
-#include "event_types.h"
-#undef DO
+
+struct event_handler_entry
+{
+    velox_event_handler_t handler;
+    struct list_head head;
+};
+
+void add_event_handler(uint8_t type, velox_event_handler_t handler)
+{
+    struct event_handler_entry * entry;
+
+    entry = (struct event_handler_entry *)
+        malloc(sizeof(struct event_handler_entry));
+    entry->handler = handler;
+
+    list_add_tail(&entry->head, &event_handlers[type]);
+}
 
 void handle_event(xcb_generic_event_t * event)
 {
-    switch (event->response_type & ~0x80)
+    struct event_handler_entry * entry;
+    struct list_head * handlers;
+    uint8_t type;
+
+    type = XCB_EVENT_RESPONSE_TYPE(event);
+    handlers = &event_handlers[type];
+
+    if (list_empty(handlers))
     {
-#define DO(type, name)                                                      \
-        case type:                                                          \
-        {                                                                   \
-            struct name ## _event_handler_entry * entry;                    \
-                                                                            \
-            list_for_each_entry(entry, &name ## _event_handlers, head)      \
-            {                                                               \
-                entry->handler((xcb_ ## name ## _event_t *) event);         \
-            }                                                               \
-                                                                            \
-            break;                                                          \
-        }
-#include "event_types.h"
-#undef DO
+        DEBUG_PRINT("no handlers for event type %u\n", type);
+    }
+
+    list_for_each_entry(entry, handlers, head)
+    {
+        entry->handler(event);
     }
 }
 
@@ -380,18 +391,18 @@ static void mapping_notify(xcb_mapping_notify_event_t * event)
 
 void setup_event_handlers()
 {
-    add_key_press_event_handler(&key_press);
-    add_button_press_event_handler(&button_press);
-    add_enter_notify_event_handler(&enter_notify);
-    add_leave_notify_event_handler(&leave_notify);
-    add_destroy_notify_event_handler(&destroy_notify);
-    add_unmap_notify_event_handler(&unmap_notify);
-    add_map_request_event_handler(&map_request);
-    add_configure_notify_event_handler(&configure_notify);
-    add_configure_request_event_handler(&configure_request);
-    add_property_notify_event_handler(&property_notify);
-    add_client_message_event_handler(&client_message);
-    add_mapping_notify_event_handler(&mapping_notify);
+    add_event_handler(XCB_KEY_PRESS,            &key_press);
+    add_event_handler(XCB_BUTTON_PRESS,         &button_press);
+    add_event_handler(XCB_ENTER_NOTIFY,         &enter_notify);
+    add_event_handler(XCB_LEAVE_NOTIFY,         &leave_notify);
+    add_event_handler(XCB_DESTROY_NOTIFY,       &destroy_notify);
+    add_event_handler(XCB_UNMAP_NOTIFY,         &unmap_notify);
+    add_event_handler(XCB_MAP_REQUEST,          &map_request);
+    add_event_handler(XCB_CONFIGURE_NOTIFY,     &configure_notify);
+    add_event_handler(XCB_CONFIGURE_REQUEST,    &configure_request);
+    add_event_handler(XCB_PROPERTY_NOTIFY,      &property_notify);
+    add_event_handler(XCB_CLIENT_MESSAGE,       &client_message);
+    add_event_handler(XCB_MAPPING_NOTIFY,       &mapping_notify);
 }
 
 // vim: fdm=syntax fo=croql et sw=4 sts=4 ts=8
