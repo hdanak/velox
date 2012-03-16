@@ -52,8 +52,8 @@ bool window_has_protocol(xcb_window_t window, xcb_atom_t protocol)
 
 void window_set_geometry(struct velox_window * window, struct velox_area * area)
 {
-    window->x = area->x;
-    window->y = area->y;
+    window->x = area->x + window->border_width;
+    window->y = area->y + window->border_width;
     window->width = area->width - 2 * window->border_width;
     window->height = area->height - 2 * window->border_width;
 }
